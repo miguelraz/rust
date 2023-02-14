@@ -36,14 +36,15 @@ use rustc_middle::mir::*;
 use rustc_middle::ty::TyCtxt;
 use smallvec::SmallVec;
 
-pub struct SimplifyCfg {
-    label: String,
-}
-
-impl SimplifyCfg {
-    pub fn new(label: &str) -> Self {
-        SimplifyCfg { label: format!("SimplifyCfg-{}", label) }
-    }
+pub enum SimplifyCfg {
+    Initial,
+    PromoteConsts,
+    RemoveFalseEdges,
+    EarlyOpt,
+    ElaborateDrops,
+    AfterUninhabitedEnumBranching,
+    Final,
+    MakeShim,
 }
 
 pub fn simplify_cfg<'tcx>(tcx: TyCtxt<'tcx>, body: &mut Body<'tcx>) {
@@ -61,7 +62,8 @@ impl<'tcx> MirPass<'tcx> for SimplifyCfg {
     }
 
     fn run_pass(&self, tcx: TyCtxt<'tcx>, body: &mut Body<'tcx>) {
-        debug!("SimplifyCfg({:?}) - simplifying {:?}", self.label, body.source);
+        let label = &self.name();
+        debug!("SimplifyCfg({:?}) - simplifying {:?}", label, body.source);
         simplify_cfg(tcx, body);
     }
 }

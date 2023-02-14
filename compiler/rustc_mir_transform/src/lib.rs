@@ -296,7 +296,8 @@ fn mir_const(tcx: TyCtxt<'_>, def: ty::WithOptConstParam<LocalDefId>) -> &Steal<
             &Lint(check_const_item_mutation::CheckConstItemMutation),
             &Lint(function_item_references::FunctionItemReferences),
             // What we need to do constant evaluation.
-            &simplify::SimplifyCfg::new("initial"),
+            //&simplify::SimplifyCfg::new("initial"),
+            &simplify::SimplifyCfg::Initial,
             &rustc_peek::SanityCheck, // Just a lint
         ],
         None,
@@ -336,7 +337,8 @@ fn mir_promoted(
         &mut body,
         &[
             &promote_pass,
-            &simplify::SimplifyCfg::new("promote-consts"),
+            //&simplify::SimplifyCfg::new("promote-consts"),
+            &simplify::SimplifyCfg::PromoteConsts,
             &coverage::InstrumentCoverage,
         ],
         Some(MirPhase::Analysis(AnalysisPhase::Initial)),
@@ -469,7 +471,8 @@ fn run_analysis_to_runtime_passes<'tcx>(tcx: TyCtxt<'tcx>, body: &mut Body<'tcx>
             body,
             &[
                 &remove_uninit_drops::RemoveUninitDrops,
-                &simplify::SimplifyCfg::new("remove-false-edges"),
+                //&simplify::SimplifyCfg::new("remove-false-edges"),
+                &simplify::SimplifyCfg::RemoveFalseEdges,
             ],
             None,
         );
@@ -492,7 +495,9 @@ fn run_analysis_cleanup_passes<'tcx>(tcx: TyCtxt<'tcx>, body: &mut Body<'tcx>) {
     let passes: &[&dyn MirPass<'tcx>] = &[
         &cleanup_post_borrowck::CleanupPostBorrowck,
         &remove_noop_landing_pads::RemoveNoopLandingPads,
-        &simplify::SimplifyCfg::new("early-opt"),
+        &cleanup_post_borrowck::CleanupNonCodegenStatements,
+        //&simplify::SimplifyCfg::new("early-opt"),
+        &simplify::SimplifyCfg::EarlyOpt,
         &deref_separator::Derefer,
     ];
 
@@ -524,8 +529,12 @@ fn run_runtime_lowering_passes<'tcx>(tcx: TyCtxt<'tcx>, body: &mut Body<'tcx>) {
 
 /// Returns the sequence of passes that do the initial cleanup of runtime MIR.
 fn run_runtime_cleanup_passes<'tcx>(tcx: TyCtxt<'tcx>, body: &mut Body<'tcx>) {
-    let passes: &[&dyn MirPass<'tcx>] =
-        &[&lower_intrinsics::LowerIntrinsics, &simplify::SimplifyCfg::new("elaborate-drops")];
+    let passes: &[&dyn MirPass<'tcx>] = &[
+        &elaborate_box_derefs::ElaborateBoxDerefs,
+        &lower_intrinsics::LowerIntrinsics,
+        //&simplify::SimplifyCfg::new("elaborate-drops"),
+        &simplify::SimplifyCfg::ElaborateDrops,
+    ];
 
     pm::run_passes(tcx, body, passes, Some(MirPhase::Runtime(RuntimePhase::PostCleanup)));
 
@@ -551,7 +560,8 @@ fn run_optimization_passes<'tcx>(tcx: TyCtxt<'tcx>, body: &mut Body<'tcx>) {
             &lower_slice_len::LowerSliceLenCalls, // has to be done before inlining, otherwise actual call will be almost always inlined. Also simple, so can just do first
             &unreachable_prop::UnreachablePropagation,
             &uninhabited_enum_branching::UninhabitedEnumBranching,
-            &o1(simplify::SimplifyCfg::new("after-uninhabited-enum-branching")),
+            //&o1(simplify::SimplifyCfg::new("after-uninhabited-enum-branching")),
+            &o1(simplify::SimplifyCfg::AfterUninhabitedEnumBranching),
             &inline::Inline,
             &remove_storage_markers::RemoveStorageMarkers,
             &remove_zsts::RemoveZsts,
@@ -572,13 +582,16 @@ fn run_optimization_passes<'tcx>(tcx: TyCtxt<'tcx>, body: &mut Body<'tcx>) {
             // Const-prop runs unconditionally, but doesn't mutate the MIR at mir-opt-level=0.
             &const_debuginfo::ConstDebugInfo,
             &o1(simplify_branches::SimplifyConstCondition::new("after-const-prop")),
+            //&o1(simplify_branches::SimplifyConstCondition::AfterConstProp),
             &early_otherwise_branch::EarlyOtherwiseBranch,
             &simplify_comparison_integral::SimplifyComparisonIntegral,
             &dead_store_elimination::DeadStoreElimination,
             &dest_prop::DestinationPropagation,
             &o1(simplify_branches::SimplifyConstCondition::new("final")),
+            //&o1(simplify_branches::SimplifyConstCondition::Final),
             &o1(remove_noop_landing_pads::RemoveNoopLandingPads),
-            &o1(simplify::SimplifyCfg::new("final")),
+            //&o1(simplify::SimplifyCfg::new("final")),
+            &o1(simplify::SimplifyCfg::Final),
             &nrvo::RenameReturnPlace,
             &simplify::SimplifyLocals::new("final"),
             &multiple_return_terminators::MultipleReturnTerminators,
